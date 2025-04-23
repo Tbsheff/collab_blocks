@@ -1,0 +1,28 @@
+{
+    "files": [],
+    "references": [
+        {
+            "path": "packages/protocol"
+        },
+        {
+            "path": "apps/collab-pod"
+        },
+        {
+            "path": "apps/edge-worker"
+        },
+        {
+            "path": "apps/react-sdk"
+        }
+    ],
+    "compilerOptions": {
+        "composite": true,
+        "module": "commonjs",
+        "target": "ES2020",
+        "outDir": "dist",
+        "rootDir": ".",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+    }
+}
