@@ -1,0 +1,30 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    command: [ "redis-server", "--appendonly", "no" ]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: collabblocks
+      POSTGRES_PASSWORD: collabblocks
+      POSTGRES_DB: collabblocks
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - '4222:4222' # Client connections
+      - '8222:8222' # Monitoring
+    command: [ "-js" ] # Enable JetStream
+    restart: unless-stopped
+
+volumes:
+  pgdata:

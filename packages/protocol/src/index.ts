@@ -2,6 +2,9 @@ import { encode, decode } from '@msgpack/msgpack';
 
 export * from './presence';
 export * from './storage';
+export * from './comments';
+export * from './notifications';
+export * from './messages';
 
 /**
  * MsgPack encoding utils

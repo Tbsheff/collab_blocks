@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageType, msgpack } from '@collabblocks/protocol';
+import { MessageType, msgpack, StorageUpdateMessage } from '@collabblocks/protocol';
 import * as Y from 'yjs';
 import { useConnection } from './connection';
 
@@ -75,12 +75,16 @@ export function useLiveObject<T extends Record<string, any>>(initial: T) {
 
         // Send update to server if connected
         if (connection?.isConnected && docRef.current) {
-            const update = Y.encodeStateAsUpdate(docRef.current);
-            const message = new Uint8Array([
+            const yUpdate = Y.encodeStateAsUpdate(docRef.current);
+            const message: StorageUpdateMessage = {
+                type: MessageType.STORAGE_UPDATE,
+                update: yUpdate,
+            };
+            const encoded = new Uint8Array([
                 MessageType.STORAGE_UPDATE,
-                ...update
+                ...msgpack.encode(message)
             ]);
-            connection.send(message);
+            connection.send(encoded);
         }
     }, [connection]);
 

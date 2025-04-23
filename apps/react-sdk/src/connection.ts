@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { MessageType, msgpack } from '@collabblocks/protocol';
+import { MessageType, msgpack, PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
 
 // Event emitter interface
 type Listener<T = any> = (data: T, ...args: any[]) => void;
@@ -76,13 +76,14 @@ export class Connection implements EventEmitter {
 
                 switch (messageType) {
                     case MessageType.PRESENCE_DIFF: {
-                        const diff = msgpack.decode(payload) as { userId: string; data: any };
+                        const diff = msgpack.decode(payload) as PresenceDiffMessage;
                         this.emit('presence', diff.userId, diff.data);
                         break;
                     }
 
                     case MessageType.STORAGE_UPDATE: {
-                        this.emit('storageUpdate', payload);
+                        const updateMsg = msgpack.decode(payload) as StorageUpdateMessage;
+                        this.emit('storageUpdate', updateMsg.update);
                         break;
                     }
 

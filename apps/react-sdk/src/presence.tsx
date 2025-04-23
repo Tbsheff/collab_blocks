@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PresenceState, MessageType, msgpack } from '@collabblocks/protocol';
+import { PresenceState, MessageType, msgpack, PresenceDiffMessage } from '@collabblocks/protocol';
 import { useConnection } from './connection';
 
 /**
@@ -19,11 +19,16 @@ export function useMyPresence() {
 
         // Only send if connected
         if (connection?.isConnected) {
-            const message = new Uint8Array([
+            const message: PresenceDiffMessage = {
+                type: MessageType.PRESENCE_DIFF,
+                userId: newPresence.meta?.userId || 'unknown',
+                data: update,
+            };
+            const encoded = new Uint8Array([
                 MessageType.PRESENCE_DIFF,
-                ...msgpack.encode(update)
+                ...msgpack.encode(message)
             ]);
-            connection.send(message);
+            connection.send(encoded);
         }
     }, [connection]);
 

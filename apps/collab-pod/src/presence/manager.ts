@@ -1,5 +1,6 @@
 import { PresenceState } from '@collabblocks/protocol';
-import LRU from 'lru-cache';
+import { LRUCache } from 'lru-cache';
+import type Redis from 'ioredis';
 
 interface UserPresence {
     userId: string;
@@ -8,22 +9,30 @@ interface UserPresence {
 }
 
 /**
- * Manages presence state for rooms
+ * Manages presence state for rooms, with optional Redis Streams support
  */
 export class PresenceManager {
     // Room ID -> Map of User ID -> Presence State
-    private rooms = new Map<string, LRU<string, UserPresence>>();
+    private rooms = new Map<string, LRUCache<string, UserPresence>>();
+    private redis?: Redis;
+    private streamPrefix = 'presence-';
+    private ttl: number;
+
+    constructor(redisClient?: Redis, ttl: number = 1000 * 60 * 2) {
+        this.redis = redisClient;
+        this.ttl = ttl;
+    }
 
     /**
      * Get or create LRU cache for a room
      */
-    private getRoom(roomId: string): LRU<string, UserPresence> {
+    private getRoom(roomId: string): LRUCache<string, UserPresence> {
         let room = this.rooms.get(roomId);
 
         if (!room) {
-            room = new LRU<string, UserPresence>({
+            room = new LRUCache<string, UserPresence>({
                 max: 1000, // Maximum 1000 users per room
-                ttl: 1000 * 60 * 2, // 2 minutes TTL
+                ttl: this.ttl,
             });
 
             this.rooms.set(roomId, room);
@@ -35,7 +44,7 @@ export class PresenceManager {
     /**
      * Apply presence update for a user
      */
-    public applyDiff(roomId: string, userId: string, diff: Partial<PresenceState>): void {
+    public async applyDiff(roomId: string, userId: string, diff: Partial<PresenceState>): Promise<void> {
         const room = this.getRoom(roomId);
         const existing = room.get(userId);
 
@@ -48,6 +57,17 @@ export class PresenceManager {
             state: newState,
             lastActive: Date.now(),
         });
+
+        // Publish diff to Redis Stream if enabled
+        if (this.redis) {
+            await this.redis.xadd(
+                this.streamPrefix + roomId,
+                '*',
+                'userId', userId,
+                'diff', JSON.stringify(diff),
+                'ts', Date.now().toString()
+            );
+        }
     }
 
     /**
@@ -92,5 +112,13 @@ export class PresenceManager {
                 this.rooms.delete(roomId);
             }
         }
+    }
+
+    // Read presence diffs from Redis Stream (for cross-pod sync)
+    public async readDiffs(roomId: string, lastId: string = '$'): Promise<any[]> {
+        if (!this.redis) return [];
+        const stream = this.streamPrefix + roomId;
+        const res = await this.redis.xread('BLOCK', 0, 'STREAMS', stream, lastId);
+        return res || [];
     }
 } 

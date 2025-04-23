@@ -1,4 +1,4 @@
-import { MessageType, msgpack } from '@collabblocks/protocol';
+import { MessageType, msgpack, PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
 
 export interface RoomState {
     connections: Map<string, WebSocket>;
@@ -135,12 +135,16 @@ export class RoomDO {
      */
     private handlePresenceDiff(userId: string, connectionId: WebSocket, payload: Uint8Array): void {
         try {
-            const diff = msgpack.decode(payload) as Record<string, any>;
+            const diff = msgpack.decode(payload) as PresenceDiffMessage;
 
             // Broadcast to all other connections
             const message = new Uint8Array([
                 MessageType.PRESENCE_DIFF,
-                ...msgpack.encode({ userId, data: diff })
+                ...msgpack.encode({
+                    type: MessageType.PRESENCE_DIFF,
+                    userId,
+                    data: diff.data,
+                } as PresenceDiffMessage)
             ]);
 
             this.broadcast(message, connectionId);
@@ -159,7 +163,10 @@ export class RoomDO {
             // Broadcast storage update to all connections
             const message = new Uint8Array([
                 MessageType.STORAGE_UPDATE,
-                ...payload
+                ...msgpack.encode({
+                    type: MessageType.STORAGE_UPDATE,
+                    update: payload,
+                } as StorageUpdateMessage)
             ]);
 
             this.broadcast(message, connectionId);

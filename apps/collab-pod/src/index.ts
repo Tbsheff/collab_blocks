@@ -3,7 +3,7 @@ import http from 'http';
 import WebSocket from 'ws';
 import { PresenceManager } from './presence/manager';
 import { StorageEngine } from './storage/engine';
-import { MessageType, msgpack } from '@collabblocks/protocol';
+import { MessageType, msgpack, PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
 
 // Create Express app
 const app = express();
@@ -90,17 +90,17 @@ wss.on('connection', (ws, req) => {
     // Helper function for handling presence updates
     function handlePresenceDiff(roomId: string, userId: string, payload: Buffer): void {
         try {
-            const diff = msgpack.decode(payload) as Record<string, any>;
+            const diff = msgpack.decode(payload) as PresenceDiffMessage;
 
             // Update presence state
-            presenceManager.applyDiff(roomId, userId, diff);
+            presenceManager.applyDiff(roomId, userId, diff.data);
 
             // Broadcast to all clients in the room
             broadcast(roomId, {
                 type: MessageType.PRESENCE_DIFF,
                 userId,
-                data: diff
-            }, ws);
+                data: diff.data,
+            } as PresenceDiffMessage, ws);
         } catch (error) {
             console.error('Error handling presence diff:', error);
         }
@@ -113,12 +113,16 @@ wss.on('connection', (ws, req) => {
             const mergedUpdate = storageEngine.applyUpdate(roomId, new Uint8Array(payload));
 
             // Broadcast to all clients in the room
-            const message = Buffer.concat([
+            const message: StorageUpdateMessage = {
+                type: MessageType.STORAGE_UPDATE,
+                update: mergedUpdate,
+            };
+            const buffer = Buffer.concat([
                 Buffer.from([MessageType.STORAGE_UPDATE]),
-                Buffer.from(mergedUpdate)
+                Buffer.from(msgpack.encode(message))
             ]);
 
-            broadcastRaw(roomId, message, ws);
+            broadcastRaw(roomId, buffer, ws);
         } catch (error) {
             console.error('Error handling storage update:', error);
         }
