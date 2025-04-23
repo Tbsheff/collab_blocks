@@ -1,6 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PresenceState, MessageType, msgpack, PresenceDiffMessage } from '@collabblocks/protocol';
-import { useConnection } from './connection';
+import { useConnection, MessageType, msgpack } from './connection';
+
+// Define PresenceState and PresenceDiffMessage interfaces
+export interface PresenceState {
+    cursor?: { x: number, y: number };
+    meta?: {
+        userId: string;
+        [key: string]: any;
+    };
+    [key: string]: any;
+}
+
+export interface PresenceDiffMessage {
+    type: number;
+    userId: string;
+    data: Partial<PresenceState>;
+}
 
 /**
  * Hook to manage the current user's presence
@@ -81,7 +96,13 @@ export function useOthers<T = PresenceState[]>(
  */
 export function createPresenceHooks<T extends PresenceState = PresenceState>() {
     return {
-        useMyPresence: useMyPresence as () => [Partial<T>, (update: Partial<T>) => void],
+        useMyPresence: () => {
+            const [state, setState] = useMyPresence();
+            return [
+                state as unknown as Partial<T>,
+                setState as unknown as (update: Partial<T>) => void
+            ] as [Partial<T>, (update: Partial<T>) => void];
+        },
         useOthers: useOthers as <S = T[]>(selector?: (others: T[]) => S) => S | T[],
     };
 }

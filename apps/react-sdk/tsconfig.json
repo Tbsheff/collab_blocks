@@ -8,12 +8,26 @@
         "declarationMap": true,
         "jsx": "react-jsx",
         "lib": [
+            "ES2020",
             "DOM",
-            "DOM.Iterable",
-            "ES2020"
-        ]
+            "DOM.Iterable"
+        ],
+        "target": "ES2020",
+        "useDefineForClassFields": true,
+        "module": "ESNext",
+        "skipLibCheck": true,
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true
     },
     "include": [
-        "src/**/*"
+        "src/**/*",
+        "src/global.d.ts"
     ]
 }

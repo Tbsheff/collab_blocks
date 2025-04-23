@@ -101,12 +101,12 @@ This checklist breaks down every step needed to build CollabBlocks end‑to‑en
 - [ ] Run `terraform init && terraform apply`
 
 ## 9. Broadcast & Threaded Comments
-- [ ] Define SQL tables in Prisma for `comments` and `comment_reactions`
-- [ ] Run Prisma migration for comments
-- [ ] Add WS msg types `0x10`–`0x14` in edge protocol
-- [ ] Create `apps/collab-pod/src/comments/manager.ts` with CRDT merge and OR‑Set for reactions
-- [ ] Expose tRPC hooks: `addComment`, `editComment`, `deleteComment`, `addReaction`, `removeReaction`
-- [ ] Implement mention parsing `/@username/` and emit events to NATS `notif.*`
+- [x] Define SQL tables in Prisma for `comments` and `comment_reactions`
+- [x] Run Prisma migration for comments
+- [x] Add WS msg types `0x10`–`0x14` in edge protocol
+- [x] Create `apps/collab-pod/src/comments/manager.ts` with CRDT merge and OR-Set for reactions
+- [x] Expose API hooks: `addComment`, `editComment`, `deleteComment`, `addReaction`, `removeReaction`
+- [x] Implement mention parsing `/@username/` and emit events to NATS `notif.*`
 - [ ] Write React hooks in `apps/react-sdk/src/comments.ts`
 - [ ] Build UI components: `CommentThread`, `ReactionBar` in demo app
 - [ ] Add unit and integration tests for comments and reactions
@@ -121,8 +121,8 @@ This checklist breaks down every step needed to build CollabBlocks end‑to‑en
 - [ ] Write tests for template rendering, retry logic, and DLQ behavior
 
 ## 11. Monitoring Dashboard & DevTools Extension
-- [ ] Add OpenTelemetry SDK to collab‑pod and React SDK
-- [ ] Configure Prometheus scrape endpoint in collab‑pod
+- [x] Add OpenTelemetry SDK to collab‑pod and React SDK
+- [x] Configure Prometheus scrape endpoint in collab‑pod
 - [ ] Write Grafana dashboard JSON and commit under `infra/monitoring`
 - [ ] Implement ClickHouse consumer service for `metrics.ops`
 - [ ] Build DevTools Bridge sidecar in `apps/edge-worker` or separate service

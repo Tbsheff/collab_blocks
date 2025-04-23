@@ -5,17 +5,19 @@
     "main": "dist/index.js",
     "scripts": {
         "build": "tsc -b",
-        "dev": "wrangler dev",
-        "deploy": "wrangler deploy",
-        "test": "vitest"
+        "dev": "wrangler dev src/index.ts",
+        "deploy": "wrangler deploy src/index.ts",
+        "test": "vitest run"
     },
     "dependencies": {
-        "@cloudflare/workers-types": "^4.20240627.0"
+        "@cloudflare/workers-types": "^4.20240627.0",
+        "@collabblocks/auth": "workspace:*",
+        "@collabblocks/protocol": "workspace:*"
     },
     "devDependencies": {
         "ts-node-dev": "^2.0.0",
         "typescript": "^5.8.3",
-        "vitest": "^3.1.2",
-        "wrangler": "^3.32.0"
+        "vitest": "^3.1.0",
+        "wrangler": "^3.0.0"
     }
 }

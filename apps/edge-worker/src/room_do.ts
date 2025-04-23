@@ -1,4 +1,6 @@
-import { MessageType, msgpack, PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
+import { MessageType, msgpack } from '@collabblocks/protocol';
+import type { PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
+import { verify } from '@collabblocks/auth';
 
 export interface RoomState {
     connections: Map<string, WebSocket>;
@@ -57,8 +59,15 @@ export class RoomDO {
             return new Response('Missing auth token', { status: 401 });
         }
 
-        // TODO: Validate token properly (stub for now)
-        const userId = 'user_' + Math.random().toString(36).substring(2, 9);
+        // Validate token using auth package
+        let userId: string;
+        try {
+            const decoded = verify(token);
+            userId = decoded.userId;
+            if (!userId) throw new Error('userId missing in token');
+        } catch (err) {
+            return new Response('Invalid auth token', { status: 401 });
+        }
 
         // Set up WebSocket
         const pair = new WebSocketPair();
@@ -85,11 +94,11 @@ export class RoomDO {
                 // Process message based on type
                 switch (messageType) {
                     case MessageType.PRESENCE_DIFF:
-                        this.handlePresenceDiff(userId, connectionId, payload);
+                        this.handlePresenceDiff(userId, server, payload);
                         break;
 
                     case MessageType.STORAGE_UPDATE:
-                        this.handleStorageUpdate(userId, connectionId, payload);
+                        this.handleStorageUpdate(userId, server, payload);
                         break;
 
                     default:
@@ -126,7 +135,7 @@ export class RoomDO {
     private sendPresenceList(client: WebSocket): void {
         // TODO: Implement full sync
         // For MVP, just send an empty presence list
-        const presenceList = [];
+        const presenceList: any[] = [];
         client.send(JSON.stringify({ type: 'presence_sync', presenceList }));
     }
 
@@ -135,7 +144,7 @@ export class RoomDO {
      */
     private handlePresenceDiff(userId: string, connectionId: WebSocket, payload: Uint8Array): void {
         try {
-            const diff = msgpack.decode(payload) as PresenceDiffMessage;
+            const diff = msgpack.decode(payload);
 
             // Broadcast to all other connections
             const message = new Uint8Array([
@@ -144,7 +153,7 @@ export class RoomDO {
                     type: MessageType.PRESENCE_DIFF,
                     userId,
                     data: diff.data,
-                } as PresenceDiffMessage)
+                })
             ]);
 
             this.broadcast(message, connectionId);
@@ -166,7 +175,7 @@ export class RoomDO {
                 ...msgpack.encode({
                     type: MessageType.STORAGE_UPDATE,
                     update: payload,
-                } as StorageUpdateMessage)
+                })
             ]);
 
             this.broadcast(message, connectionId);
@@ -182,7 +191,7 @@ export class RoomDO {
      */
     private broadcast(message: Uint8Array, excludeId?: WebSocket): void {
         for (const [id, ws] of this.roomState.connections) {
-            if (id !== excludeId && ws.readyState === WebSocket.OPEN) {
+            if (ws !== excludeId && ws.readyState === WebSocket.OPEN) {
                 ws.send(message);
             }
         }

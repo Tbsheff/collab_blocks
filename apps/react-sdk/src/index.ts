@@ -1,8 +1,17 @@
 export * from './connection';
-export * from './presence';
+export {
+    useMyPresence,
+    useOthers,
+    createPresenceHooks,
+    useCursor
+} from './presence';
+export type { PresenceState } from './presence';
 export * from './storage';
+export * from './comments';
+export * from './comments/index';
 
 // Re-export createClient as the main API
 export { useCreateConnection as createClient } from './connection';
-export { createPresenceHooks, useCursor } from './presence';
-export { createStorageHooks } from './storage'; 
+export { createStorageHooks } from './storage';
+export { CommentsProvider, useComments, useBlockComments } from './comments';
+export { CommentsThread } from './comments/CommentsThread'; 

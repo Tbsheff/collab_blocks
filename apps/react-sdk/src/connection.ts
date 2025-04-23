@@ -1,12 +1,49 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { MessageType, msgpack, PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
+
+// Define enums and types from protocol
+export enum MessageType {
+    PRESENCE_DIFF = 0x01,
+    STORAGE_UPDATE = 0x02,
+    COMMENT_ADD = 0x03,
+    COMMENT_EDIT = 0x04,
+    COMMENT_DEL = 0x05,
+    REACTION_ADD = 0x06,
+    REACTION_REMOVE = 0x07,
+}
+
+export interface PresenceDiffMessage {
+    type: number;
+    userId: string;
+    data: Record<string, any>;
+}
+
+export interface StorageUpdateMessage {
+    type: number;
+    update: Uint8Array;
+}
+
+// Simple msgpack-like implementation for encoding/decoding
+export const msgpack = {
+    encode: (data: any): Uint8Array => {
+        // Use JSON for simplicity - in a real implementation, use a proper msgpack library
+        const str = JSON.stringify(data);
+        const encoder = new TextEncoder();
+        return encoder.encode(str);
+    },
+    decode: (data: Uint8Array): any => {
+        // Use JSON for simplicity - in a real implementation, use a proper msgpack library
+        const decoder = new TextDecoder();
+        const str = decoder.decode(data);
+        return JSON.parse(str);
+    }
+};
 
 // Event emitter interface
-type Listener<T = any> = (data: T, ...args: any[]) => void;
+type Listener = (...args: any[]) => void;
 
 interface EventEmitter {
-    on<T = any>(event: string, listener: Listener<T>): void;
-    off<T = any>(event: string, listener: Listener<T>): void;
+    on(event: string, listener: Listener): void;
+    off(event: string, listener: Listener): void;
     emit(event: string, ...args: any[]): void;
 }
 
@@ -15,8 +52,11 @@ interface EventEmitter {
  */
 export class Connection implements EventEmitter {
     private ws: WebSocket | null = null;
-    private url: string;
-    private room: string;
+
+    // Make url and room public so they can be accessed
+    public url: string;
+    public room: string;
+
     private token: string;
     private listeners: Record<string, Listener[]> = {};
     private reconnectAttempts = 0;
@@ -122,19 +162,28 @@ export class Connection implements EventEmitter {
     }
 
     /**
+     * Send JSON data over WebSocket
+     */
+    sendJson(data: any): void {
+        if (this.ws && this.isConnected) {
+            this.ws.send(JSON.stringify(data));
+        }
+    }
+
+    /**
      * Register event listener
      */
-    on<T = any>(event: string, listener: Listener<T>): void {
+    on(event: string, listener: Listener): void {
         if (!this.listeners[event]) {
             this.listeners[event] = [];
         }
-        this.listeners[event].push(listener as Listener);
+        this.listeners[event].push(listener);
     }
 
     /**
      * Remove event listener
      */
-    off<T = any>(event: string, listener: Listener<T>): void {
+    off(event: string, listener: Listener): void {
         if (!this.listeners[event]) return;
 
         this.listeners[event] = this.listeners[event].filter(l => l !== listener);

@@ -18,6 +18,7 @@
   },
   "workspaces": [
     "apps/*",
+    "packages/*",
     "infra/*",
     "scripts",
     "docs"
@@ -34,6 +35,8 @@
     "@msgpack/msgpack": "^3.1.1",
     "@typescript-eslint/eslint-plugin": "^8.31.0",
     "@typescript-eslint/parser": "^8.31.0",
-    "eslint-config-prettier": "^10.1.2"
+    "eslint-config-prettier": "^10.1.2",
+    "express-prom-bundle": "^8.0.0",
+    "prom-client": "^15.1.3"
   }
 }

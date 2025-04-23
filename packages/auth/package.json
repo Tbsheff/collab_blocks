@@ -1,0 +1,16 @@
+{
+    "name": "@collabblocks/auth",
+    "version": "0.1.0",
+    "main": "src/index.ts",
+    "type": "module",
+    "scripts": {
+        "test": "vitest run"
+    },
+    "devDependencies": {
+        "@types/jsonwebtoken": "^9.0.9",
+        "vitest": "^3.1.2"
+    },
+    "dependencies": {
+        "jsonwebtoken": "^9.0.2"
+    }
+}

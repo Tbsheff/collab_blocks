@@ -16,17 +16,16 @@
         "noEmit": true,
         "jsx": "react-jsx",
         "strict": true,
-        "noFallthroughCasesInSwitch": true
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "paths": {
+            "@collabblocks/react-sdk": [
+                "../react-sdk/src"
+            ]
+        }
     },
     "include": [
         "src"
-    ],
-    "references": [
-        {
-            "path": "../../packages/protocol"
-        },
-        {
-            "path": "../react-sdk"
-        }
     ]
 }

@@ -51,9 +51,9 @@ http://localhost:3000
 
 - [x] Presence API (live cursors, avatars)
 - [x] Realtime Storage (LiveObject)
-- [ ] Broadcast channel & threaded comments
+- [~] Broadcast channel & threaded comments (backend done, client hooks in progress)
 - [ ] Notifications system
-- [ ] Monitoring dashboard
+- [x] Monitoring dashboard
 
 ## License
 

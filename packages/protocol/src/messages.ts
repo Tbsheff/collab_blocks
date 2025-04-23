@@ -80,4 +80,59 @@ export interface SystemMessage {
     type: MessageType.SYSTEM;
     event: string;
     payload?: any;
+}
+
+/**
+ * Comment add message
+ */
+export interface CommentAddMessage {
+    type: MessageType.COMMENT_ADD;
+    id: string;
+    roomId: string;
+    blockId: string;
+    parentId?: string | null;
+    userId: string;
+    bodyMd: string;
+    timestamp: number;
+}
+
+/**
+ * Comment edit message
+ */
+export interface CommentEditMessage {
+    type: MessageType.COMMENT_EDIT;
+    id: string;
+    bodyMd: string;
+    timestamp: number;
+}
+
+/**
+ * Comment delete message
+ */
+export interface CommentDeleteMessage {
+    type: MessageType.COMMENT_DEL;
+    id: string;
+    timestamp: number;
+}
+
+/**
+ * Reaction add message
+ */
+export interface ReactionAddMessage {
+    type: MessageType.REACTION_ADD;
+    commentId: string;
+    emoji: string;
+    userId: string;
+    timestamp: number;
+}
+
+/**
+ * Reaction remove message
+ */
+export interface ReactionRemoveMessage {
+    type: MessageType.REACTION_REMOVE;
+    commentId: string;
+    emoji: string;
+    userId: string;
+    timestamp: number;
 } 

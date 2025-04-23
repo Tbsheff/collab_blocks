@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageType, msgpack, StorageUpdateMessage } from '@collabblocks/protocol';
 import * as Y from 'yjs';
 import { useConnection } from './connection';
+import { msgpack, MessageType } from './connection';
+
+// Define StorageUpdateMessage interface
+interface StorageUpdateMessage {
+    type: number;
+    update: Uint8Array;
+}
 
 /**
  * Hook for syncing a LiveObject
@@ -28,7 +34,7 @@ export function useLiveObject<T extends Record<string, any>>(initial: T) {
         const updateState = () => {
             const newState = {} as T;
             map.forEach((value, key) => {
-                newState[key as keyof T] = value;
+                newState[key as keyof T] = value as T[keyof T];
             });
             setState(newState);
         };

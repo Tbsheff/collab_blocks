@@ -1,8 +1,33 @@
-import { PresenceState } from '@collabblocks/protocol';
 import { LRUCache } from 'lru-cache';
 import type Redis from 'ioredis';
 
-interface UserPresence {
+// Define presence state interface for local use
+interface PresenceState {
+    /**
+     * User's cursor position (normalized 0-1 coordinates)
+     */
+    cursor?: { x: number; y: number };
+
+    /**
+     * URL to user's avatar image
+     */
+    avatar?: string;
+
+    /**
+     * User's status (e.g., "idle", "editing", "commenting")
+     */
+    status?: string;
+
+    /**
+     * Additional user metadata (limit <2KB)
+     */
+    meta?: Record<string, unknown>;
+}
+
+/**
+ * Room member
+ */
+interface RoomMember {
     userId: string;
     state: PresenceState;
     lastActive: number;
@@ -12,8 +37,16 @@ interface UserPresence {
  * Manages presence state for rooms, with optional Redis Streams support
  */
 export class PresenceManager {
-    // Room ID -> Map of User ID -> Presence State
-    private rooms = new Map<string, LRUCache<string, UserPresence>>();
+    // Room ID -> Map of user IDs to member data
+    private rooms: Map<string, Map<string, RoomMember>> = new Map();
+
+    // LRU cache for rooms - expires after 1 hour of inactivity
+    private roomCache = new LRUCache<string, Map<string, RoomMember>>({
+        max: 1000,
+        ttl: 1000 * 60 * 60, // 1 hour
+        allowStale: false,
+    });
+
     private redis?: Redis;
     private streamPrefix = 'presence-';
     private ttl: number;
@@ -26,15 +59,11 @@ export class PresenceManager {
     /**
      * Get or create LRU cache for a room
      */
-    private getRoom(roomId: string): LRUCache<string, UserPresence> {
+    private getRoom(roomId: string): Map<string, RoomMember> {
         let room = this.rooms.get(roomId);
 
         if (!room) {
-            room = new LRUCache<string, UserPresence>({
-                max: 1000, // Maximum 1000 users per room
-                ttl: this.ttl,
-            });
-
+            room = new Map();
             this.rooms.set(roomId, room);
         }
 
@@ -74,17 +103,13 @@ export class PresenceManager {
      * Get full presence state for a room
      */
     public getFullState(roomId: string): PresenceState[] {
-        const room = this.getRoom(roomId);
+        const room = this.rooms.get(roomId);
         const result: PresenceState[] = [];
 
-        for (const [, presence] of room.entries()) {
-            result.push({
-                ...presence.state,
-                meta: {
-                    ...presence.state.meta,
-                    userId: presence.userId,
-                },
-            });
+        if (room) {
+            for (const member of room.values()) {
+                result.push(member.state);
+            }
         }
 
         return result;
@@ -97,6 +122,9 @@ export class PresenceManager {
         const room = this.rooms.get(roomId);
         if (room) {
             room.delete(userId);
+            if (room.size === 0) {
+                this.rooms.delete(roomId);
+            }
         }
     }
 
@@ -105,9 +133,18 @@ export class PresenceManager {
      * Called periodically to remove stale entries
      */
     public cleanup(): void {
-        // LRU handles TTL automatically
-        // Just check if rooms are empty and remove them
+        const now = Date.now();
+        const timeout = 60 * 1000; // 60 seconds
+
         for (const [roomId, room] of this.rooms.entries()) {
+            let hasChanges = false;
+            for (const [userId, member] of room.entries()) {
+                if (now - member.lastActive > timeout) {
+                    room.delete(userId);
+                    hasChanges = true;
+                }
+            }
+
             if (room.size === 0) {
                 this.rooms.delete(roomId);
             }

@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+data:
+  prometheus.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus:9090
+      isDefault: true
+    - name: Tempo
+      type: tempo
+      url: http://tempo:3100
+      isDefault: false
+      uid: tempo
+      jsonData:
+        httpMethod: GET
+        serviceMap:
+          datasourceUid: prometheus
+    - name: Loki
+      type: loki
+      url: http://loki:3100
+      isDefault: false
+      uid: loki
+      jsonData:
+        derivedFields:
+          - datasourceUid: tempo
+            matcherRegex: "traceID=(\\w+)"
+            name: TraceID
+            url: "$${__value.raw}" 

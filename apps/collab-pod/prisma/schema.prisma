@@ -1,0 +1,44 @@
+// Prisma schema for comments & reactions
+// This file defines the database models for the Broadcast & Threaded Comments feature
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Comment {
+  id         String    @id
+  roomId     BigInt    @map("room_id")
+  blockId    String    @map("block_id")
+  parentId   String?   @map("parent_id")
+  path       String    // ltree path as text; create GIST index manually in migration
+  userId     String    @map("user_id")
+  bodyMd     String    @map("body_md")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt     @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+
+  reactions  Reaction[]
+
+  @@map("comments")
+  @@index([roomId], name: "idx_comments_room")
+  @@index([blockId], name: "idx_comments_block")
+  // Path index to be created via raw SQL migration
+}
+
+model Reaction {
+  commentId String   @map("comment_id")
+  emoji     String
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now())  @map("created_at")
+
+  Comment   Comment  @relation(fields: [commentId], references: [id])
+
+  @@id([commentId, emoji, userId])
+  @@map("comment_reactions")
+  @@index([commentId], name: "idx_reactions_comment")
+} 
