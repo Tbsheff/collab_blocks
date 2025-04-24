@@ -12,6 +12,9 @@
         },
         {
             "path": "apps/react-sdk"
+        },
+        {
+            "path": "packages/auth"
         }
     ],
     "compilerOptions": {

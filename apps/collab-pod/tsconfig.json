@@ -5,9 +5,29 @@
         "rootDir": "src",
         "composite": true,
         "declaration": true,
-        "declarationMap": true
+        "declarationMap": true,
+        "baseUrl": ".",
+        "paths": {
+            "@collab-blocks/protocol": [
+                "../../packages/protocol/src"
+            ],
+            "@collab-blocks/protocol/*": [
+                "../../packages/protocol/src/*"
+            ],
+            "@collabblocks/auth": [
+                "../../packages/auth/src"
+            ],
+            "@collabblocks/auth/*": [
+                "../../packages/auth/src/*"
+            ]
+        }
     },
     "include": [
         "src/**/*"
+    ],
+    "references": [
+        {
+            "path": "../../packages/protocol"
+        }
     ]
 }

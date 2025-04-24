@@ -122,6 +122,7 @@ export const CommentsThread: React.FC<CommentsThreadProps> = ({
                                 <button
                                     onClick={() => handleDelete(id)}
                                     className="text-sm text-red-500 hover:underline"
+                                    data-testid={`delete-comment-${id}`}
                                 >
                                     Delete
                                 </button>
@@ -170,11 +171,12 @@ export const CommentsThread: React.FC<CommentsThreadProps> = ({
             <div
                 className="comments-list mb-4 overflow-y-auto"
                 style={{ maxHeight }}
+                data-testid="comments-list"
             >
                 {isLoading ? (
-                    <div className="loading text-center py-4">Loading comments...</div>
+                    <div className="loading text-center py-4" data-testid="loading-message">Loading comments...</div>
                 ) : commentThreads.length === 0 ? (
-                    <div className="empty-state text-center py-4 text-gray-500">
+                    <div className="empty-state text-center py-4 text-gray-500" data-testid="empty-message">
                         No comments yet. Be the first to comment!
                     </div>
                 ) : (
@@ -189,12 +191,14 @@ export const CommentsThread: React.FC<CommentsThreadProps> = ({
                     placeholder="Add a comment..."
                     className="w-full border rounded-lg p-2 mb-2"
                     rows={3}
+                    data-testid="comment-input"
                 />
                 <button
                     type="submit"
                     disabled={!newComment.trim()}
                     className={`px-4 py-2 rounded ${!newComment.trim() ? 'bg-gray-300 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'
                         }`}
+                    data-testid="post-button"
                 >
                     Post
                 </button>

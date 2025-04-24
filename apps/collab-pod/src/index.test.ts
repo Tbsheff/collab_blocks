@@ -3,6 +3,7 @@ import request from 'supertest';
 import http from 'http';
 import express from 'express';
 import { PresenceManager } from './presence/manager';
+import type { UserPresence, PresenceDiff } from '@collab-blocks/protocol';
 import { StorageEngine } from './storage/engine';
 import * as Y from 'yjs';
 import Redis from 'ioredis';
@@ -31,14 +32,16 @@ describe('CollabPod Server', () => {
         expect(res.text).toBe('OK');
     });
 
-    it('PresenceManager basic usage', () => {
+    it('PresenceManager basic usage', async () => {
         const pm = new PresenceManager();
-        pm.applyDiff('room1', 'user1', { cursor: { x: 1, y: 2 } });
-        const state = pm.getFullState('room1');
-        expect(state.length).toBe(1);
-        expect(state[0]).toMatchObject({ cursor: { x: 1, y: 2 } });
-        pm.removeUser('room1', 'user1');
-        expect(pm.getFullState('room1')).toEqual([]);
+        await pm.updateUserPresence('room1', 'user1', { c: { x: 1, y: 2 }, s: 'editing' });
+        const state = pm.getFullPresenceState('room1');
+        expect(Object.keys(state).length).toBe(1);
+        expect(state['user1']).toMatchObject({ u: 'user1', c: { x: 1, y: 2 }, s: 'editing' });
+        expect(state['user1'].t).toBeDefined();
+
+        await pm.removeUser('room1', 'user1');
+        expect(Object.keys(pm.getFullPresenceState('room1')).length).toBe(0);
     });
 
     it('StorageEngine basic usage', () => {
@@ -51,7 +54,6 @@ describe('CollabPod Server', () => {
         const state = se.getState(roomId);
         expect(state).toBeInstanceOf(Uint8Array);
         se.removeRoom(roomId);
-        // After removal, a new doc is created
         expect(se.getDocument(roomId)).toBeDefined();
     });
 });
@@ -72,73 +74,119 @@ describe('Presence API', () => {
         await redis.quit();
     });
 
+    beforeEach(async () => {
+        await redis.del('presence-' + roomId);
+        const currentUsers = Object.keys(pm.getFullPresenceState(roomId));
+        for (const user of currentUsers) {
+            await pm.removeUser(roomId, user);
+        }
+        await pm.removeUser(roomId, userId);
+    });
+
     it('should add, update, and remove user presence in a room', async () => {
-        // Add presence
-        await pm.applyDiff(roomId, userId, { cursor: { x: 1, y: 2 } });
-        let state = pm.getFullState(roomId);
-        expect(state.length).toBe(1);
-        expect(state[0]).toMatchObject({ cursor: { x: 1, y: 2 } });
+        await pm.updateUserPresence(roomId, userId, { c: { x: 1, y: 2 }, s: 'active' });
+        let state = pm.getFullPresenceState(roomId);
+        expect(Object.keys(state).length).toBe(1);
+        expect(state[userId]).toMatchObject({ u: userId, c: { x: 1, y: 2 }, s: 'active' });
 
-        // Update presence
-        await pm.applyDiff(roomId, userId, { cursor: { x: 3, y: 2 } });
-        state = pm.getFullState(roomId);
-        expect(state[0]).toMatchObject({ cursor: { x: 3, y: 2 } });
+        await pm.updateUserPresence(roomId, userId, { c: { x: 3, y: 2 }, s: 'typing' });
+        state = pm.getFullPresenceState(roomId);
+        expect(state[userId]).toMatchObject({ u: userId, c: { x: 3, y: 2 }, s: 'typing' });
 
-        // Check Redis stream
-        const entries = await redis.xrange('presence-' + roomId, '-', '+');
+        const streamKey = 'presence-' + roomId;
+        const entries = await redis.xrange(streamKey, '-', '+');
         expect(entries.length).toBeGreaterThanOrEqual(2);
-        const lastEntry = entries[entries.length - 1][1];
-        const diffFieldIndex = lastEntry.findIndex((v: string) => v === 'diff');
-        expect(diffFieldIndex).toBeGreaterThan(-1);
-        const diff = JSON.parse(lastEntry[diffFieldIndex + 1]);
-        expect(diff).toMatchObject({ cursor: { x: 3, y: 2 } });
+        const lastEntryFields = entries[entries.length - 1][1];
+        const dataFieldIndex = lastEntryFields.findIndex((v: string) => v === 'data');
+        expect(dataFieldIndex).toBeGreaterThan(-1);
+        expect(lastEntryFields.length).toBeGreaterThan(dataFieldIndex + 1);
+        const presenceDiffJson = lastEntryFields[dataFieldIndex + 1];
+        const presenceDiff = JSON.parse(presenceDiffJson) as PresenceDiff;
 
-        // Remove presence
-        pm.removeUser(roomId, userId);
-        state = pm.getFullState(roomId);
-        expect(state).toEqual([]);
+        expect(presenceDiff[userId]).toBeDefined();
+        expect(presenceDiff[userId]).not.toBeNull();
+        expect(presenceDiff[userId]).toMatchObject({ u: userId, c: { x: 3, y: 2 }, s: 'typing' });
+
+        await pm.removeUser(roomId, userId);
+        state = pm.getFullPresenceState(roomId);
+        expect(Object.keys(state).length).toBe(0);
+
+        const entriesAfterRemove = await redis.xrange(streamKey, '-', '+');
+        expect(entriesAfterRemove.length).toBeGreaterThan(entries.length);
+        const removalEntryFields = entriesAfterRemove[entriesAfterRemove.length - 1][1];
+        const removalDataIndex = removalEntryFields.findIndex((v: string) => v === 'data');
+        expect(removalDataIndex).toBeGreaterThan(-1);
+        const removalDiffJson = removalEntryFields[removalDataIndex + 1];
+        const removalDiff = JSON.parse(removalDiffJson) as PresenceDiff;
+        expect(removalDiff[userId]).toBeNull();
     });
 
-    it('should expire presence after TTL', async () => {
-        // Use a short TTL for testing
-        const shortTTL = 100;
-        const pmShort = new PresenceManager(redis, shortTTL);
-        await pmShort.applyDiff(roomId, userId, { cursor: { x: 1, y: 0 } });
-        let state = pmShort.getFullState(roomId);
-        expect(state.length).toBe(1);
-        // Wait for TTL to expire
-        await new Promise(res => setTimeout(res, shortTTL + 50));
-        state = pmShort.getFullState(roomId);
-        expect(state).toEqual([]);
+    it('should handle internal cleanup based on inactivity', async () => {
+        vi.useFakeTimers();
+        const pmWithCleanup = new PresenceManager(redis);
+        await pm.updateUserPresence(roomId, userId, { s: 'idle' });
+        let state = pm.getFullPresenceState(roomId);
+        expect(Object.keys(state).length).toBe(1);
+
+        vi.advanceTimersByTime(60 * 60 * 1000 + 1000);
+        pm.cleanup();
+
+        state = pm.getFullPresenceState(roomId);
+        expect(Object.keys(state).length).toBe(0);
+        vi.useRealTimers();
+
+        const entriesAfterCleanup = await redis.xrange('presence-' + roomId, '-', '+');
+        const lastEntryFields = entriesAfterCleanup[entriesAfterCleanup.length - 1][1];
+        const dataFieldIndex = lastEntryFields.findIndex((v: string) => v === 'data');
+        const lastDiffJson = lastEntryFields[dataFieldIndex + 1];
+        const lastDiff = JSON.parse(lastDiffJson) as PresenceDiff;
+        expect(lastDiff[userId]).not.toBeNull();
+        expect(lastDiff[userId]?.s).toBe('idle');
     });
 
-    it('should broadcast presence diffs to other pods via Redis Streams', async () => {
-        // Simulate two pods with separate PresenceManager instances
+    it('should broadcast presence diffs correctly via Redis Streams', async () => {
         const pmPod1 = new PresenceManager(redis);
         const pmPod2 = new PresenceManager(redis);
-        const roomId = 'broadcastroom';
-        const userId = 'userA';
-        await redis.del('presence-' + roomId);
+        const broadcastRoomId = 'broadcastroom-test';
+        const userA = 'userA';
+        const streamKey = 'presence-' + broadcastRoomId;
+        await redis.del(streamKey);
 
-        // Pod 1 writes a diff
-        await pmPod1.applyDiff(roomId, userId, { cursor: { x: 42, y: 0 } });
+        const presenceData: Partial<Omit<UserPresence, 'u' | 't'>> = { c: { x: 42, y: 0 }, s: 'viewing' };
+        await pmPod1.updateUserPresence(broadcastRoomId, userA, presenceData);
 
-        // Pod 2 reads the diff from the stream
-        // Get the first entry (should be the one just written)
-        const entries = await redis.xrange('presence-' + roomId, '-', '+');
-        expect(entries.length).toBeGreaterThanOrEqual(1);
-        const entry = entries[0][1];
-        const userIdIndex = entry.findIndex((v: string) => v === 'userId');
-        const diffIndex = entry.findIndex((v: string) => v === 'diff');
-        expect(userIdIndex).toBeGreaterThan(-1);
-        expect(diffIndex).toBeGreaterThan(-1);
-        expect(entry[userIdIndex + 1]).toBe(userId);
-        const diff = JSON.parse(entry[diffIndex + 1]);
-        expect(diff).toMatchObject({ cursor: { x: 42, y: 0 } });
+        const readResult = await redis.xread('BLOCK', 500, 'STREAMS', streamKey, '0-0');
+        expect(readResult).not.toBeNull();
+        expect(Array.isArray(readResult)).toBe(true);
+        expect(readResult).toHaveLength(1);
 
-        // Pod 2 can use readDiffs to get the same entry
-        const read = await pmPod2.readDiffs(roomId, '0');
-        expect(read.length).toBeGreaterThanOrEqual(1);
+        const streamResult = readResult as [string, [string, string[]][]][];
+        const [key, messages] = streamResult[0];
+
+        expect(key).toBe(streamKey);
+        expect(Array.isArray(messages)).toBe(true);
+        expect(messages).toHaveLength(1);
+
+        const message = messages[0];
+        expect(Array.isArray(message)).toBe(true);
+        expect(message).toHaveLength(2);
+        const [messageId, fields] = message;
+
+        expect(Array.isArray(fields)).toBe(true);
+        expect(fields.length).toBeGreaterThanOrEqual(2);
+
+        const dataIndex = fields.findIndex((f: string) => f === 'data');
+        expect(dataIndex).not.toBe(-1);
+        expect(fields.length).toBeGreaterThan(dataIndex + 1);
+        const diffJson = fields[dataIndex + 1];
+        expect(typeof diffJson).toBe('string'); // Ensure it's a string before parsing
+        const diff = JSON.parse(diffJson) as PresenceDiff;
+
+        // Check the content of the diff received from Redis
+        expect(diff[userA]).toBeDefined();
+        expect(diff[userA]).not.toBeNull();
+        expect(diff[userA]).toMatchObject({ u: userA, ...presenceData });
+        expect(diff[userA]?.t).toBeDefined();
     });
 
     it('should recover presence state from Redis on pod restart', () => {

@@ -251,53 +251,89 @@ export function CommentsProvider({ children, userId }: {
                 }
             });
 
-            if (!targetBlockId || !targetComment) {
-                throw new Error('Comment not found in local state');
+            if (!targetComment) {
+                throw new Error(`Comment with ID ${commentId} not found`);
             }
 
-            const response = await fetch(`${connection.url.replace(/^ws/, 'http')}/api/comments/${commentId}/reactions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    emoji,
-                    userId,
-                    roomId: connection.room
-                })
-            });
+            // WebSocket approach
+            const wsPromise = new Promise<boolean>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    connection.off('reaction_added', handleReactionAdded);
+                    reject(new Error('WebSocket reaction addition timed out'));
+                }, 5000);
 
-            if (!response.ok) {
-                throw new Error(`Failed to add reaction: ${response.statusText}`);
-            }
-
-            // Update local state
-            setComments(prevComments => {
-                const blockComments = prevComments[targetBlockId] || [];
-                const updatedComments = blockComments.map(c => {
-                    if (c.id === commentId) {
-                        const reactions = c.reactions || {};
-                        const users = reactions[emoji] || [];
-
-                        if (!users.includes(userId)) {
-                            return {
-                                ...c,
-                                reactions: {
-                                    ...reactions,
-                                    [emoji]: [...users, userId]
-                                }
-                            };
-                        }
+                const handleReactionAdded = (reactCommentId: string, reactEmoji: string, reactUserId: string) => {
+                    if (reactCommentId === commentId && reactEmoji === emoji && reactUserId === userId) {
+                        clearTimeout(timeout);
+                        connection.off('reaction_added', handleReactionAdded);
+                        resolve(true);
                     }
-                    return c;
-                });
-
-                return {
-                    ...prevComments,
-                    [targetBlockId]: updatedComments
                 };
+
+                connection.on('reaction_added', handleReactionAdded);
+
+                // Send reaction request via WebSocket
+                connection.sendJson({
+                    type: 'add_reaction',
+                    commentId,
+                    emoji,
+                    userId
+                });
             });
 
+            // Fallback to REST API
+            const restPromise = new Promise<boolean>(async (resolve, reject) => {
+                setTimeout(async () => {
+                    try {
+                        const response = await fetch(`${connection.url.replace(/^ws/, 'http')}/api/comments/${commentId}/reactions`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                emoji,
+                                userId
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`Failed to add reaction: ${response.statusText}`);
+                        }
+
+                        resolve(true);
+                    } catch (err) {
+                        reject(err);
+                    }
+                }, 3000);
+            });
+
+            // Update optimistically for better UX
+            setComments(prevComments => {
+                const newComments = { ...prevComments };
+                if (newComments[targetBlockId]) {
+                    newComments[targetBlockId] = newComments[targetBlockId].map(c => {
+                        if (c.id === commentId) {
+                            const reactions = c.reactions || {};
+                            const userIds = reactions[emoji] || [];
+                            // Only add if not already there
+                            if (!userIds.includes(userId)) {
+                                return {
+                                    ...c,
+                                    reactions: {
+                                        ...reactions,
+                                        [emoji]: [...userIds, userId]
+                                    }
+                                };
+                            }
+                        }
+                        return c;
+                    });
+                }
+                return newComments;
+            });
+
+            // Wait for either WebSocket or REST API to resolve
+            await Promise.race([wsPromise, restPromise]);
             return true;
         } catch (err) {
             console.error('Error adding reaction:', err);
@@ -325,52 +361,83 @@ export function CommentsProvider({ children, userId }: {
                 }
             });
 
-            if (!targetBlockId || !targetComment) {
-                throw new Error('Comment not found in local state');
+            if (!targetComment) {
+                throw new Error(`Comment with ID ${commentId} not found`);
             }
 
-            const response = await fetch(`${connection.url.replace(/^ws/, 'http')}/api/comments/${commentId}/reactions/${emoji}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    userId,
-                    roomId: connection.room
-                })
+            // WebSocket approach
+            const wsPromise = new Promise<boolean>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    connection.off('reaction_removed', handleReactionRemoved);
+                    reject(new Error('WebSocket reaction removal timed out'));
+                }, 5000);
+
+                const handleReactionRemoved = (reactCommentId: string, reactEmoji: string, reactUserId: string) => {
+                    if (reactCommentId === commentId && reactEmoji === emoji && reactUserId === userId) {
+                        clearTimeout(timeout);
+                        connection.off('reaction_removed', handleReactionRemoved);
+                        resolve(true);
+                    }
+                };
+
+                connection.on('reaction_removed', handleReactionRemoved);
+
+                // Send reaction removal request via WebSocket
+                connection.sendJson({
+                    type: 'remove_reaction',
+                    commentId,
+                    emoji,
+                    userId
+                });
             });
 
-            if (!response.ok) {
-                throw new Error(`Failed to remove reaction: ${response.statusText}`);
-            }
+            // Fallback to REST API
+            const restPromise = new Promise<boolean>(async (resolve, reject) => {
+                setTimeout(async () => {
+                    try {
+                        const response = await fetch(`${connection.url.replace(/^ws/, 'http')}/api/comments/${commentId}/reactions/${encodeURIComponent(emoji)}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                userId
+                            })
+                        });
 
-            // Update local state
-            setComments(prevComments => {
-                const blockComments = prevComments[targetBlockId] || [];
-                const updatedComments = blockComments.map(c => {
-                    if (c.id === commentId && c.reactions && c.reactions[emoji]) {
-                        const reactions = { ...c.reactions };
-                        reactions[emoji] = reactions[emoji].filter(id => id !== userId);
-
-                        // Remove the emoji key if no users left
-                        if (reactions[emoji].length === 0) {
-                            delete reactions[emoji];
+                        if (!response.ok) {
+                            throw new Error(`Failed to remove reaction: ${response.statusText}`);
                         }
 
-                        return {
-                            ...c,
-                            reactions
-                        };
+                        resolve(true);
+                    } catch (err) {
+                        reject(err);
                     }
-                    return c;
-                });
-
-                return {
-                    ...prevComments,
-                    [targetBlockId]: updatedComments
-                };
+                }, 3000);
             });
 
+            // Update optimistically for better UX
+            setComments(prevComments => {
+                const newComments = { ...prevComments };
+                if (newComments[targetBlockId]) {
+                    newComments[targetBlockId] = newComments[targetBlockId].map(c => {
+                        if (c.id === commentId && c.reactions && c.reactions[emoji]) {
+                            const reactions = { ...c.reactions };
+                            reactions[emoji] = reactions[emoji].filter(id => id !== userId);
+                            // Remove the emoji key if there are no reactions left
+                            if (reactions[emoji].length === 0) {
+                                delete reactions[emoji];
+                            }
+                            return { ...c, reactions };
+                        }
+                        return c;
+                    });
+                }
+                return newComments;
+            });
+
+            // Wait for either WebSocket or REST API to resolve
+            await Promise.race([wsPromise, restPromise]);
             return true;
         } catch (err) {
             console.error('Error removing reaction:', err);
@@ -379,7 +446,7 @@ export function CommentsProvider({ children, userId }: {
         }
     }, [connection, userId, comments]);
 
-    // Listen for real-time comment updates
+    // Listen for real-time comment events
     useEffect(() => {
         if (!connection) return;
 
@@ -387,7 +454,7 @@ export function CommentsProvider({ children, userId }: {
         const handleNewComment = (comment: Comment) => {
             setComments(prevComments => {
                 const blockComments = prevComments[comment.blockId] || [];
-                // Only add if not already in the list
+                // Only add if not already there
                 if (!blockComments.some(c => c.id === comment.id)) {
                     return {
                         ...prevComments,
@@ -398,38 +465,35 @@ export function CommentsProvider({ children, userId }: {
             });
         };
 
-        // Handle comment deletions
+        // Handle comment deletion
         const handleCommentDeleted = (commentId: string) => {
             setComments(prevComments => {
                 const newComments = { ...prevComments };
-
                 // Find and remove the comment from all blocks
                 for (const blockId in newComments) {
                     newComments[blockId] = newComments[blockId].filter(c => c.id !== commentId);
                 }
-
                 return newComments;
             });
         };
 
-        // Handle reaction additions
+        // Handle new reactions
         const handleReactionAdded = (commentId: string, emoji: string, reactionUserId: string) => {
             setComments(prevComments => {
                 const newComments = { ...prevComments };
-
-                // Find the comment and add the reaction
+                // Find the comment across all blocks
                 for (const blockId in newComments) {
                     newComments[blockId] = newComments[blockId].map(c => {
                         if (c.id === commentId) {
                             const reactions = c.reactions || {};
-                            const users = reactions[emoji] || [];
-
-                            if (!users.includes(reactionUserId)) {
+                            const userIds = reactions[emoji] || [];
+                            // Only add if not already there
+                            if (!userIds.includes(reactionUserId)) {
                                 return {
                                     ...c,
                                     reactions: {
                                         ...reactions,
-                                        [emoji]: [...users, reactionUserId]
+                                        [emoji]: [...userIds, reactionUserId]
                                     }
                                 };
                             }
@@ -437,46 +501,40 @@ export function CommentsProvider({ children, userId }: {
                         return c;
                     });
                 }
-
                 return newComments;
             });
         };
 
-        // Handle reaction removals
+        // Handle removed reactions
         const handleReactionRemoved = (commentId: string, emoji: string, reactionUserId: string) => {
             setComments(prevComments => {
                 const newComments = { ...prevComments };
-
-                // Find the comment and remove the reaction
+                // Find the comment across all blocks
                 for (const blockId in newComments) {
                     newComments[blockId] = newComments[blockId].map(c => {
                         if (c.id === commentId && c.reactions && c.reactions[emoji]) {
                             const reactions = { ...c.reactions };
                             reactions[emoji] = reactions[emoji].filter(id => id !== reactionUserId);
-
-                            // Remove the emoji key if no users left
+                            // Remove the emoji key if there are no reactions left
                             if (reactions[emoji].length === 0) {
                                 delete reactions[emoji];
                             }
-
-                            return {
-                                ...c,
-                                reactions
-                            };
+                            return { ...c, reactions };
                         }
                         return c;
                     });
                 }
-
                 return newComments;
             });
         };
 
+        // Register event listeners
         connection.on('comment_created', handleNewComment);
         connection.on('comment_deleted', handleCommentDeleted);
         connection.on('reaction_added', handleReactionAdded);
         connection.on('reaction_removed', handleReactionRemoved);
 
+        // Cleanup event listeners
         return () => {
             connection.off('comment_created', handleNewComment);
             connection.off('comment_deleted', handleCommentDeleted);
@@ -485,6 +543,7 @@ export function CommentsProvider({ children, userId }: {
         };
     }, [connection]);
 
+    // Context value for comments hooks
     const contextValue: CommentsContextValue = {
         comments,
         isLoading,
@@ -503,7 +562,7 @@ export function CommentsProvider({ children, userId }: {
     );
 }
 
-// Hook to use comments
+// Hook to access the comments context
 export function useComments() {
     const context = useContext(CommentsContext);
     if (!context) {
@@ -512,14 +571,12 @@ export function useComments() {
     return context;
 }
 
-// Hook to get comments for a specific block
+// Hook to access comments for a specific block
 export function useBlockComments(blockId: string) {
     const { comments, isLoading, error, fetchComments } = useComments();
 
     useEffect(() => {
-        if (blockId) {
-            fetchComments(blockId);
-        }
+        fetchComments(blockId);
     }, [blockId, fetchComments]);
 
     return {
@@ -527,4 +584,31 @@ export function useBlockComments(blockId: string) {
         isLoading,
         error
     };
+}
+
+// Helper function to build comment tree from flat array
+export function buildCommentTree(comments: Comment[]): Comment[] {
+    const commentMap = new Map<string, Comment & { replies: Comment[] }>();
+    const rootComments: (Comment & { replies: Comment[] })[] = [];
+
+    // First pass: create a map of comments by ID with empty replies array
+    comments.forEach(comment => {
+        commentMap.set(comment.id, { ...comment, replies: [] });
+    });
+
+    // Second pass: populate replies and identify root comments
+    comments.forEach(comment => {
+        const commentWithReplies = commentMap.get(comment.id)!;
+
+        if (comment.parentId && commentMap.has(comment.parentId)) {
+            // This is a reply, add it to parent's replies
+            const parent = commentMap.get(comment.parentId)!;
+            parent.replies.push(commentWithReplies);
+        } else {
+            // This is a root comment
+            rootComments.push(commentWithReplies);
+        }
+    });
+
+    return rootComments;
 } 

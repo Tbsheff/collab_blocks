@@ -1,10 +1,25 @@
 import { MessageType, msgpack } from '@collabblocks/protocol';
 import type { PresenceDiffMessage, StorageUpdateMessage } from '@collabblocks/protocol';
-import { verify } from '@collabblocks/auth';
+import { verify, verifyWebSocketToken } from '@collabblocks/auth';
 
 export interface RoomState {
     connections: Map<string, WebSocket>;
     podUrl: string;
+}
+
+// Local interface for decoded token
+interface DecodedToken {
+    userId: string;
+    role?: string;
+    rooms?: string[];
+    [key: string]: any;
+}
+
+// Connection details interface for keeping track of authenticated connections
+interface ConnectionDetails {
+    userId: string;
+    ws: WebSocket;
+    connectionId: string;
 }
 
 /**
@@ -60,14 +75,30 @@ export class RoomDO {
         }
 
         // Validate token using auth package
-        let userId: string;
+        let decodedToken: DecodedToken | null;
         try {
-            const decoded = verify(token);
-            userId = decoded.userId;
-            if (!userId) throw new Error('userId missing in token');
+            // Use the verifyWebSocketToken method for better error handling
+            decodedToken = verifyWebSocketToken(token);
+            if (!decodedToken) {
+                throw new Error('Invalid token format');
+            }
+
+            // Ensure the token has a userId
+            if (!decodedToken.userId) {
+                throw new Error('userId missing in token');
+            }
+
+            // Optional: Check if the token has permission for this room
+            // if (!decodedToken.rooms || !decodedToken.rooms.includes(roomId)) {
+            //    throw new Error('User not authorized for this room');
+            // }
         } catch (err) {
-            return new Response('Invalid auth token', { status: 401 });
+            const errorMessage = err instanceof Error ? err.message : 'Invalid auth token';
+            return new Response(`Authentication failed: ${errorMessage}`, { status: 401 });
         }
+
+        // Extract userId from the verified token
+        const userId = decodedToken.userId;
 
         // Set up WebSocket
         const pair = new WebSocketPair();

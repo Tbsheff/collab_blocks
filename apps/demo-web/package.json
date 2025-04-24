@@ -6,7 +6,10 @@
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "cypress:open": "cypress open",
+        "cypress:run": "cypress run",
+        "test:e2e": "start-server-and-test dev http://localhost:5173 cypress:run"
     },
     "dependencies": {
         "@collabblocks/react-sdk": "workspace:*",
@@ -17,6 +20,8 @@
         "@types/react": "^18.3.20",
         "@types/react-dom": "^18.3.6",
         "@vitejs/plugin-react": "^4.4.1",
+        "cypress": "^13.6.0",
+        "start-server-and-test": "^2.0.3",
         "typescript": "^5.8.3",
         "vite": "^5.4.18"
     }
